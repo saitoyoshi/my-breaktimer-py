@@ -1,0 +1,42 @@
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+*.egg
+*.manifest
+*.spec
+env/
+venv/
+ENV/
+.VENV/
+build/
+Dist/
+*.dist-info/
+*.tgz
+*.zip
+*.rar
+*.log
+*.sqlite3
+*.db
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
+*.tmp
+*.bak
+*.old
+# Jupyter
+.ipynb_checkpoints/
+# Test caches
+.pytest_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+# Local settings
+local_settings.py
+# Media assets (optional, keep if you want to ship sounds)
+# app/assets/sounds/
+
+breaktimer-repo/
