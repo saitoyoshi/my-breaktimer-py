@@ -246,3 +246,34 @@ def send_media_play_pause() -> None:
     user32.keybd_event(VK_MEDIA_PLAY_PAUSE, 0, KEYEVENTF_KEYUP, 0)
 
 
+# System Idle / Activity tracking
+class LASTINPUTINFO(ctypes.Structure):
+    _fields_ = [
+        ("cbSize", wintypes.UINT),
+        ("dwTime", wintypes.DWORD),
+    ]
+
+
+user32.GetLastInputInfo.argtypes = [ctypes.POINTER(LASTINPUTINFO)]
+user32.GetLastInputInfo.restype = wintypes.BOOL
+
+kernel32.GetTickCount.argtypes = []
+kernel32.GetTickCount.restype = wintypes.DWORD
+
+
+def get_system_idle_seconds() -> float:
+    """
+    Returns the time in seconds since the last keyboard or mouse input.
+    Useful for detecting user idle / away from keyboard state.
+    """
+    lii = LASTINPUTINFO()
+    lii.cbSize = ctypes.sizeof(LASTINPUTINFO)
+    if user32.GetLastInputInfo(ctypes.byref(lii)):
+        # Handle 32-bit unsigned overflow wrapping of GetTickCount (after ~49.7 days)
+        current_tick = kernel32.GetTickCount()
+        elapsed_ms = (current_tick - lii.dwTime) & 0xFFFFFFFF
+        return max(0.0, float(elapsed_ms) / 1000.0)
+    return 0.0
+
+
+

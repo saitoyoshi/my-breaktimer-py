@@ -15,6 +15,12 @@ from enum import Enum, auto
 from typing import Callable, List, Optional
 from app.config import AppConfig
 
+try:
+    from app.win32 import get_system_idle_seconds
+except ImportError:
+    def get_system_idle_seconds() -> float:
+        return 0.0
+
 
 class TimerState(Enum):
     WORKING = auto()
@@ -250,14 +256,74 @@ class TimerService:
         target_str = self.get_target_time_str()
         self._log(f"設定更新 - 作業間隔: {new_config.work_duration_seconds // 60}分, 休憩: {new_config.break_duration_seconds}秒, 次回: {target_str}")
 
+    def reset_work_timer(self, reason: str = "リセット") -> None:
+        """
+        Resets and starts a fresh work interval immediately.
+        Used when resuming from sleep, returning from idle/away, or explicit user reset.
+        """
+        with self._lock:
+            was_prompting_or_breaking = (self.state in (TimerState.BREAKING, TimerState.PROMPTING))
+            self.state = TimerState.WORKING
+            self.current_total_seconds = self.config.work_duration_seconds
+            self.target_time = time.time() + self.current_total_seconds
+            self.remaining_seconds = self.current_total_seconds
+
+        # Close prompt notification if open
+        for cb in self.on_break_prompt_close_callbacks:
+            try:
+                cb()
+            except Exception:
+                pass
+
+        # Close break overlay if open
+        if was_prompting_or_breaking:
+            for cb in self.on_break_end_callbacks:
+                try:
+                    cb(True)
+                except Exception as e:
+                    print(f"[Timer] Callback error: {e}")
+
+        target_str = self.get_target_time_str()
+        self._log(f"{reason} - 作業タイマーを開始 (次回休憩予定: {target_str})")
+        self._notify_state_change()
+
     def _loop(self) -> None:
+        last_loop_time = time.time()
+        was_idle = False
+
         while self._running:
             time.sleep(0.5)
+            now = time.time()
+            elapsed_loop = now - last_loop_time
+            last_loop_time = now
+
             with self._lock:
                 if self.state == TimerState.PAUSED:
                     continue
 
-                now = time.time()
+            # 1. Check for Resume from Sleep / Suspend (Gap detection)
+            # Normal sleep(0.5) takes ~0.5s. If elapsed_loop is significantly longer, OS was suspended.
+            if self.config.reset_on_resume and elapsed_loop >= self.config.sleep_threshold_seconds:
+                self.reset_work_timer(f"スリープ復帰を検知 ({int(elapsed_loop)}秒間休止)")
+                was_idle = False
+                continue
+
+            # 2. Check for Idle / Away from computer
+            is_currently_idle = False
+            if self.config.idle_reset_enabled:
+                idle_sec = get_system_idle_seconds()
+                is_currently_idle = (idle_sec >= self.config.idle_reset_duration_seconds)
+
+                if is_currently_idle:
+                    was_idle = True
+                    # If idle threshold reached, postpone/suppress break popup while user is away
+                elif was_idle:
+                    # User returned after being idle!
+                    was_idle = False
+                    self.reset_work_timer(f"離席からの復帰を検知 ({int(self.config.idle_reset_duration_seconds // 60)}分以上無操作)")
+                    continue
+
+            with self._lock:
                 rem = max(0, int(round(self.target_time - now)))
                 self.remaining_seconds = rem
                 tot = self.current_total_seconds
@@ -269,6 +335,10 @@ class TimerService:
                     cb(rem, tot, cur_state)
                 except Exception as e:
                     print(f"[Timer] Tick callback error: {e}")
+
+            # Don't trigger new breaks if user is currently away from computer
+            if is_currently_idle and cur_state == TimerState.WORKING:
+                continue
 
             if rem <= 0:
                 if cur_state == TimerState.WORKING:

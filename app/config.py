@@ -37,6 +37,12 @@ class AppConfig:
     break_message: str = "目を休めましょう (Look 20 feet away)"
     break_submessage: str = "20フィート（約6m）先を20秒間眺めて、目のピント調節筋をリラックスさせてください。"
 
+    # Sleep & Idle detection
+    reset_on_resume: bool = True               # Reset timer immediately upon resuming from sleep/suspend
+    sleep_threshold_seconds: float = 4.0      # Loop gap seconds to detect sleep/suspend
+    idle_reset_enabled: bool = True            # Reset timer when user returns from being away (idle)
+    idle_reset_duration_seconds: int = 5 * 60 # Seconds of inactivity considered as idle break (5 min)
+
 
 
     @classmethod
