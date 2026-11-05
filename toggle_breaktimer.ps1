@@ -27,7 +27,7 @@ if ($found.Count -gt 0) {
     $notify.Icon = [System.Drawing.SystemIcons]::Information
     $notify.Visible = $true
     $notify.BalloonTipTitle = "BreakTimer Ultra"
-    $notify.BalloonTipText = "停止しました"
+    $notify.BalloonTipText = "Stopped."
     $notify.BalloonTipIcon = "Info"
     $notify.ShowBalloonTip(2000)
     Start-Sleep -Milliseconds 2500
