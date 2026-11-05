@@ -197,6 +197,12 @@ kernel32.CreateMutexW.restype = wintypes.HANDLE
 kernel32.GetLastError.argtypes = []
 kernel32.GetLastError.restype = wintypes.DWORD
 
+kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+kernel32.CloseHandle.restype = wintypes.BOOL
+
+kernel32.ReleaseMutex.argtypes = [wintypes.HANDLE]
+kernel32.ReleaseMutex.restype = wintypes.BOOL
+
 user32.FindWindowW.argtypes = [wintypes.LPCWSTR, wintypes.LPCWSTR]
 user32.FindWindowW.restype = wintypes.HWND
 
@@ -217,6 +223,24 @@ def acquire_single_instance(mutex_name: str = "BreakTimerUltra_SingleInstance_Mu
     if last_error == ERROR_ALREADY_EXISTS:
         return False
     return True
+
+
+def release_single_instance() -> None:
+    """
+    Releases and closes the singleton mutex handle so another instance can acquire it.
+    Must be called before retrying acquire_single_instance.
+    """
+    global _app_mutex_handle
+    if _app_mutex_handle:
+        try:
+            kernel32.ReleaseMutex(_app_mutex_handle)
+        except Exception:
+            pass
+        try:
+            kernel32.CloseHandle(_app_mutex_handle)
+        except Exception:
+            pass
+        _app_mutex_handle = None
 
 
 def activate_existing_instance(window_title: str = "BreakTimer Ultra — 20-20-20 ルール休憩タイマー") -> bool:

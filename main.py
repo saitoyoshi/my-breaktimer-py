@@ -2,44 +2,69 @@
 Main entry point for BreakTimer Ultra.
 Connects timer service, UI dashboard, fullscreen break overlay, and system tray.
 """
-import psutil
 import os
 import sys
-
-# Kill any existing instances of this script
-def kill_existing_instances():
-    current_pid = os.getpid()
-    script_path = os.path.abspath(sys.argv[0])
-    for proc in psutil.process_iter(['pid', 'cmdline']):
-        try:
-            pid = proc.info['pid']
-            if pid == current_pid:
-                continue
-            cmd = proc.info['cmdline']
-            if not cmd:
-                continue
-            # Check if script path appears in command line arguments
-            for arg in cmd:
-                if os.path.abspath(arg) == script_path:
-                    proc.terminate()
-                    break
-        except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
-            continue
-import os
-import sys
+import time
 import tkinter as tk
 from tkinter import messagebox
 from typing import Optional
 
+import psutil
 
 from app.config import ConfigManager
 from app.audio import AudioManager
 from app.timer_service import TimerService, TimerState
-from app.win32 import acquire_single_instance, activate_existing_instance, send_media_play_pause
+from app.win32 import (
+    acquire_single_instance, release_single_instance, send_media_play_pause
+)
 from app.ui.main_window import MainWindow
 from app.ui.overlay import BreakOverlay
 from app.ui.prompt_banner import BreakPromptBanner
 from app.ui.tray import TrayManager
+
+
+def kill_existing_instances() -> int:
+    """
+    Kill all other Python processes running main.py for BreakTimer Ultra.
+    Returns the number of processes killed.
+    Works with both `python main.py` and `pythonw main.py`.
+    """
+    current_pid = os.getpid()
+    script_name = "main.py"
+    # Get the directory of this script to match against
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    killed = 0
+
+    for proc in psutil.process_iter(['pid', 'cmdline', 'exe', 'name']):
+        try:
+            pid = proc.info['pid']
+            if pid == current_pid:
+                continue
+
+            proc_name = (proc.info.get('name') or '').lower()
+            # Only look at python/pythonw processes
+            if 'python' not in proc_name:
+                continue
+
+            cmd = proc.info.get('cmdline')
+            if not cmd:
+                continue
+
+            # Check if any argument references main.py in our script directory
+            for arg in cmd:
+                try:
+                    arg_abs = os.path.abspath(arg)
+                    if (os.path.basename(arg).lower() == script_name
+                            and os.path.dirname(arg_abs).lower() == script_dir.lower()):
+                        proc.terminate()
+                        killed += 1
+                        break
+                except (ValueError, OSError):
+                    continue
+        except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+            continue
+
+    return killed
 
 
 
@@ -263,6 +288,8 @@ class BreakTimerApp:
             self.prompt_banner.close()
         if self.overlay:
             self.overlay.close()
+        # Release the singleton mutex so a new instance can start immediately
+        release_single_instance()
         try:
             self.root.destroy()
         except Exception:
@@ -272,20 +299,45 @@ class BreakTimerApp:
 
 
 if __name__ == "__main__":
-    # Prevent multiple instances running in the background
-    kill_existing_instances()
+    # Step 1: Try to acquire the singleton mutex
     if not acquire_single_instance():
-        # Bring existing instance to top
-        if not activate_existing_instance():
-            # If window is hidden in tray, inform user
-            root_temp = tk.Tk()
-            root_temp.withdraw()
-            messagebox.showinfo(
-                "BreakTimer Ultra",
-                "BreakTimer Ultra は既に起動しています。\nタスクトレイ（右下の▲アイコン内）をご確認ください。"
-            )
-            root_temp.destroy()
-        sys.exit(0)
+        # Another instance is running. Kill it so we can take over (reset/restart).
+        print("[Main] 既存のインスタンスを検出。終了させて再起動します...")
+        killed = kill_existing_instances()
+        if killed > 0:
+            print(f"[Main] {killed} 個のプロセスを終了しました。Mutex解放を待機中...")
+
+        # Release and re-acquire: the old mutex handle was "already exists", discard it
+        release_single_instance()
+
+        # Wait for the killed processes to fully exit and release the mutex
+        max_retries = 20  # up to 4 seconds
+        acquired = False
+        for i in range(max_retries):
+            time.sleep(0.2)
+            if acquire_single_instance():
+                acquired = True
+                print(f"[Main] Mutex取得成功 (リトライ {i+1}/{max_retries})")
+                break
+            else:
+                release_single_instance()
+
+        if not acquired:
+            # Last resort: force-kill any remaining processes and try once more
+            kill_existing_instances()
+            time.sleep(1.0)
+            release_single_instance()
+            if not acquire_single_instance():
+                release_single_instance()
+                root_temp = tk.Tk()
+                root_temp.withdraw()
+                messagebox.showerror(
+                    "BreakTimer Ultra",
+                    "既存のプロセスを終了できませんでした。\n"
+                    "タスクマネージャーから pythonw / python のプロセスを終了してから再起動してください。"
+                )
+                root_temp.destroy()
+                sys.exit(1)
 
     app = BreakTimerApp()
     app.run()
