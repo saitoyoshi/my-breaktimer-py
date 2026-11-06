@@ -300,4 +300,101 @@ def get_system_idle_seconds() -> float:
     return 0.0
 
 
+# Audio playback detection via Windows Core Audio (WASAPI)
+ole32 = ctypes.windll.ole32
+
+CLSID_MMDeviceEnumerator = '{BCDE0395-E52F-467C-8E3D-C4579291692E}'
+IID_IMMDeviceEnumerator = '{A95664D2-9614-4F35-A746-DE8DB63617E6}'
+IID_IAudioMeterInformation = '{C02216F6-8C67-4B5B-9D00-D008E73E0064}'
+
+
+class _GUID(ctypes.Structure):
+    _fields_ = [
+        ('Data1', wintypes.DWORD),
+        ('Data2', wintypes.WORD),
+        ('Data3', wintypes.WORD),
+        ('Data4', ctypes.c_ubyte * 8)
+    ]
+
+
+def _guid_from_str(s: str) -> _GUID:
+    g = _GUID()
+    ole32.CLSIDFromString(wintypes.LPCWSTR(s), ctypes.byref(g))
+    return g
+
+
+def is_audio_playing() -> bool:
+    """
+    Detects if Windows is currently outputting sound through the default audio endpoint.
+    Returns True if sound/video (e.g. YouTube, Netflix, media, voice calls) is playing.
+    This prevents false idle detection while users are passively watching videos without typing/moving the mouse.
+    """
+    init_res = ole32.CoInitialize(None)
+    co_initialized = (init_res == 0 or init_res == 1)  # S_OK or S_FALSE
+
+    p_enum = ctypes.c_void_p()
+    clsid_enum = _guid_from_str(CLSID_MMDeviceEnumerator)
+    iid_enum = _guid_from_str(IID_IMMDeviceEnumerator)
+    iid_meter = _guid_from_str(IID_IAudioMeterInformation)
+
+    try:
+        hr = ole32.CoCreateInstance(
+            ctypes.byref(clsid_enum),
+            None,
+            1,  # CLSCTX_INPROC_SERVER
+            ctypes.byref(iid_enum),
+            ctypes.byref(p_enum)
+        )
+        if hr != 0 or not p_enum:
+            return False
+
+        try:
+            vt_enum = ctypes.cast(p_enum, ctypes.POINTER(ctypes.POINTER(ctypes.c_void_p))).contents
+            # IMMDeviceEnumerator::GetDefaultAudioEndpoint(eRender = 0, eMultimedia = 1, &pDevice)
+            fn_get_def = ctypes.WINFUNCTYPE(
+                ctypes.HRESULT, ctypes.c_void_p, wintypes.DWORD, wintypes.DWORD, ctypes.POINTER(ctypes.c_void_p)
+            )(vt_enum[4])
+            p_dev = ctypes.c_void_p()
+            if fn_get_def(p_enum, 0, 1, ctypes.byref(p_dev)) != 0 or not p_dev:
+                return False
+
+            try:
+                vt_dev = ctypes.cast(p_dev, ctypes.POINTER(ctypes.POINTER(ctypes.c_void_p))).contents
+                # IMMDevice::Activate
+                fn_act = ctypes.WINFUNCTYPE(
+                    ctypes.HRESULT, ctypes.c_void_p, ctypes.c_void_p, wintypes.DWORD, ctypes.c_void_p, ctypes.POINTER(ctypes.c_void_p)
+                )(vt_dev[3])
+                p_meter = ctypes.c_void_p()
+                if fn_act(p_dev, ctypes.byref(iid_meter), 1, None, ctypes.byref(p_meter)) != 0 or not p_meter:
+                    return False
+
+                try:
+                    vt_meter = ctypes.cast(p_meter, ctypes.POINTER(ctypes.POINTER(ctypes.c_void_p))).contents
+                    # IAudioMeterInformation::GetPeakValue
+                    fn_peak = ctypes.WINFUNCTYPE(
+                        ctypes.HRESULT, ctypes.c_void_p, ctypes.POINTER(ctypes.c_float)
+                    )(vt_meter[3])
+                    peak = ctypes.c_float()
+                    if fn_peak(p_meter, ctypes.byref(peak)) == 0:
+                        # Consider active if peak amplitude is greater than minimal noise threshold (0.001)
+                        return peak.value > 0.001
+                finally:
+                    # Release meter
+                    ctypes.WINFUNCTYPE(ctypes.c_ulong, ctypes.c_void_p)(vt_meter[2])(p_meter)
+            finally:
+                # Release device
+                ctypes.WINFUNCTYPE(ctypes.c_ulong, ctypes.c_void_p)(vt_dev[2])(p_dev)
+        finally:
+            # Release enumerator
+            ctypes.WINFUNCTYPE(ctypes.c_ulong, ctypes.c_void_p)(vt_enum[2])(p_enum)
+    except Exception:
+        return False
+    finally:
+        if co_initialized:
+            ole32.CoUninitialize()
+
+    return False
+
+
+
 

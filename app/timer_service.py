@@ -16,10 +16,12 @@ from typing import Callable, List, Optional
 from app.config import AppConfig
 
 try:
-    from app.win32 import get_system_idle_seconds
+    from app.win32 import get_system_idle_seconds, is_audio_playing
 except ImportError:
     def get_system_idle_seconds() -> float:
         return 0.0
+    def is_audio_playing() -> bool:
+        return False
 
 
 class TimerState(Enum):
@@ -312,13 +314,18 @@ class TimerService:
             is_currently_idle = False
             if self.config.idle_reset_enabled:
                 idle_sec = get_system_idle_seconds()
-                is_currently_idle = (idle_sec >= self.config.idle_reset_duration_seconds)
-
-                if is_currently_idle:
-                    was_idle = True
-                    # If idle threshold reached, postpone/suppress break popup while user is away
+                if idle_sec >= self.config.idle_reset_duration_seconds:
+                    # Input is idle, but check if sound/video is currently playing (YouTube, Netflix, etc.)
+                    # If audio is playing, the user is actively watching or listening - DO NOT treat as idle!
+                    audio_active = is_audio_playing()
+                    if audio_active:
+                        is_currently_idle = False
+                        was_idle = False
+                    else:
+                        is_currently_idle = True
+                        was_idle = True
                 elif was_idle:
-                    # User returned after being idle!
+                    # User returned after being idle with no audio playing!
                     was_idle = False
                     self.reset_work_timer(f"離席からの復帰を検知 ({int(self.config.idle_reset_duration_seconds // 60)}分以上無操作)")
                     continue

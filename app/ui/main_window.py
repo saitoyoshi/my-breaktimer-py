@@ -317,7 +317,25 @@ class MainWindow:
         )
         chk_pause.pack(side=tk.LEFT)
 
-        # 3.8 Display Mode Row
+        # 3.8 Idle Detection Row (Smart away detection with audio playback protection)
+        idle_frame = tk.Frame(settings_card, bg=BG_CARD)
+        idle_frame.pack(fill=tk.X, pady=(4, 2))
+
+        self.idle_reset_var = tk.BooleanVar(value=self.config.idle_reset_enabled)
+        chk_idle = tk.Checkbutton(
+            idle_frame,
+            text="🚶 5分以上離席(完全無操作・無音)した場合に復帰時タイマーをリセット (動画再生中は保護)",
+            variable=self.idle_reset_var,
+            font=FONT_MEDIUM,
+            fg=TEXT_SECONDARY,
+            bg=BG_CARD,
+            selectcolor=BG_DARK,
+            activebackground=BG_CARD,
+            activeforeground=TEXT_PRIMARY
+        )
+        chk_idle.pack(side=tk.LEFT)
+
+        # 3.9 Display Mode Row
         disp_frame = tk.Frame(settings_card, bg=BG_CARD)
         disp_frame.pack(fill=tk.X, pady=(4, 4))
 
@@ -618,6 +636,7 @@ class MainWindow:
         self.config.sound_enabled = self.sound_enabled_var.get()
         self.config.sound_theme = self.sound_theme_var.get()
         self.config.auto_pause_media = self.auto_pause_var.get()
+        self.config.idle_reset_enabled = self.idle_reset_var.get()
         self.config.display_mode = self.display_mode_var.get()
 
         self.config_manager.save()
