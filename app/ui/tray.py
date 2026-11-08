@@ -20,11 +20,13 @@ class TrayManager:
                  on_open_dashboard: Callable[[], None],
                  on_take_break: Callable[[], None],
                  on_toggle_pause: Callable[[], None],
-                 on_quit: Callable[[], None]):
+                 on_quit: Callable[[], None],
+                 on_reset_timer: Optional[Callable[[], None]] = None):
         self.on_open_dashboard = on_open_dashboard
         self.on_take_break = on_take_break
         self.on_toggle_pause = on_toggle_pause
         self.on_quit = on_quit
+        self.on_reset_timer = on_reset_timer
 
         self.icon: Optional[pystray.Icon] = None
         self._thread: Optional[threading.Thread] = None
@@ -37,15 +39,21 @@ class TrayManager:
             # Fallback simple 32x32 blue image
             image = Image.new("RGBA", (32, 32), (56, 139, 253, 255))
 
-        menu = pystray.Menu(
+        menu_items = [
             pystray.MenuItem(lambda text: self.current_status_text, None, enabled=False),
             pystray.Menu.SEPARATOR,
             pystray.MenuItem("⚙ ダッシュボード・設定を開く", self._on_open, default=True),
             pystray.MenuItem("☕ 今すぐ休憩を開始", self._on_break),
+        ]
+        if self.on_reset_timer:
+            menu_items.append(pystray.MenuItem("🔄 最初から数え直す (リセット)", self._on_reset))
+        menu_items.extend([
             pystray.MenuItem("⏸ 一時停止 / 再開", self._on_pause),
             pystray.Menu.SEPARATOR,
             pystray.MenuItem("❌ 終了", self._on_quit)
-        )
+        ])
+
+        menu = pystray.Menu(*menu_items)
 
         self.icon = pystray.Icon("BreakTimerUltra", image, "BreakTimer Ultra", menu)
 
@@ -66,6 +74,10 @@ class TrayManager:
 
     def _on_break(self, icon, item) -> None:
         self.on_take_break()
+
+    def _on_reset(self, icon, item) -> None:
+        if self.on_reset_timer:
+            self.on_reset_timer()
 
     def _on_pause(self, icon, item) -> None:
         self.on_toggle_pause()

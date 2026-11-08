@@ -143,9 +143,9 @@ class MainWindow:
         )
         self.pbar_canvas.pack(fill=tk.X, pady=(2, 10))
 
-        # Quick action buttons row
+        # Quick action buttons row (Main controls)
         btn_row = tk.Frame(self.status_card, bg=BG_CARD)
-        btn_row.pack(fill=tk.X)
+        btn_row.pack(fill=tk.X, pady=(0, 6))
 
         self.btn_take_break = tk.Button(
             btn_row,
@@ -163,37 +163,21 @@ class MainWindow:
         )
         self.btn_take_break.pack(side=tk.LEFT, padx=(0, 4), expand=True, fill=tk.X)
 
-        self.btn_test_prompt = tk.Button(
+        self.btn_reset = tk.Button(
             btn_row,
-            text="🔔 通知バーをテスト",
+            text="🔄 最初から数え直す",
             font=FONT_BUTTON,
             fg=TEXT_PRIMARY,
-            bg="#1f6feb",
-            activebackground="#388bfd",
-            activeforeground="#ffffff",
+            bg="#21262d",
+            activebackground="#30363d",
+            activeforeground=TEXT_PRIMARY,
             relief=tk.FLAT,
             padx=8,
             pady=6,
             cursor="hand2",
-            command=self._on_test_prompt_clicked
+            command=self._on_reset_clicked
         )
-        self.btn_test_prompt.pack(side=tk.LEFT, padx=4, expand=True, fill=tk.X)
-
-        self.btn_test_break = tk.Button(
-            btn_row,
-            text="⚡ 全画面テスト (5秒)",
-            font=FONT_BUTTON,
-            fg=TEXT_PRIMARY,
-            bg="#238636",
-            activebackground="#2ea043",
-            activeforeground="#ffffff",
-            relief=tk.FLAT,
-            padx=8,
-            pady=6,
-            cursor="hand2",
-            command=self._on_test_break_clicked
-        )
-        self.btn_test_break.pack(side=tk.LEFT, padx=4, expand=True, fill=tk.X)
+        self.btn_reset.pack(side=tk.LEFT, padx=4, expand=True, fill=tk.X)
 
         self.btn_pause = tk.Button(
             btn_row,
@@ -210,6 +194,42 @@ class MainWindow:
             command=self._on_pause_clicked
         )
         self.btn_pause.pack(side=tk.LEFT, padx=(4, 0), expand=True, fill=tk.X)
+
+        # Test action buttons row
+        test_btn_row = tk.Frame(self.status_card, bg=BG_CARD)
+        test_btn_row.pack(fill=tk.X)
+
+        self.btn_test_prompt = tk.Button(
+            test_btn_row,
+            text="🔔 通知バーをテスト",
+            font=FONT_BUTTON,
+            fg=TEXT_PRIMARY,
+            bg="#1f6feb",
+            activebackground="#388bfd",
+            activeforeground="#ffffff",
+            relief=tk.FLAT,
+            padx=8,
+            pady=5,
+            cursor="hand2",
+            command=self._on_test_prompt_clicked
+        )
+        self.btn_test_prompt.pack(side=tk.LEFT, padx=(0, 4), expand=True, fill=tk.X)
+
+        self.btn_test_break = tk.Button(
+            test_btn_row,
+            text="⚡ 全画面テスト (5秒)",
+            font=FONT_BUTTON,
+            fg=TEXT_PRIMARY,
+            bg="#238636",
+            activebackground="#2ea043",
+            activeforeground="#ffffff",
+            relief=tk.FLAT,
+            padx=8,
+            pady=5,
+            cursor="hand2",
+            command=self._on_test_break_clicked
+        )
+        self.btn_test_break.pack(side=tk.LEFT, padx=(4, 0), expand=True, fill=tk.X)
 
         # 3. Settings Card
         settings_card = tk.Frame(
@@ -608,6 +628,14 @@ class MainWindow:
 
     def _on_take_break_clicked(self) -> None:
         self.timer_service.trigger_break_now()
+
+    def _on_reset_clicked(self) -> None:
+        self.timer_service.reset_work_timer("ユーザーによるタイマーリセット")
+        self.update_tick(
+            self.timer_service.remaining_seconds,
+            self.timer_service.current_total_seconds,
+            self.timer_service.state
+        )
 
     def _on_test_prompt_clicked(self) -> None:
         if self.on_test_prompt:

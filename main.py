@@ -99,7 +99,8 @@ class BreakTimerApp:
             on_open_dashboard=self.show_dashboard_threadsafe,
             on_take_break=self.take_break_threadsafe,
             on_toggle_pause=self.toggle_pause_threadsafe,
-            on_quit=self.quit_app_threadsafe
+            on_quit=self.quit_app_threadsafe,
+            on_reset_timer=self.reset_timer_threadsafe
         )
 
         # 5. Wire Timer Callbacks
@@ -136,6 +137,16 @@ class BreakTimerApp:
 
     def take_break_threadsafe(self) -> None:
         self.root.after(0, self.timer_service.trigger_break_now)
+
+    def reset_timer_threadsafe(self) -> None:
+        def _reset():
+            self.timer_service.reset_work_timer("手動リセット (トレイメニュー)")
+            self.main_window.update_tick(
+                self.timer_service.remaining_seconds,
+                self.timer_service.current_total_seconds,
+                self.timer_service.state
+            )
+        self.root.after(0, _reset)
 
     def toggle_pause_threadsafe(self) -> None:
         def _toggle():
