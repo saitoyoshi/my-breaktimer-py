@@ -326,7 +326,7 @@ class MainWindow:
         self.auto_pause_var = tk.BooleanVar(value=self.config.auto_pause_media)
         chk_pause = tk.Checkbutton(
             media_frame,
-            text="🎬 休憩開始時に動画/音楽(Netflix・YouTube等)を自動一時停止",
+            text="🎬 休憩開始時に動画/音楽(Netflix・YouTube等)を自動一時停止 (再生中のみ実行・誤再生を防止)",
             variable=self.auto_pause_var,
             font=FONT_MEDIUM,
             fg=ACCENT_CYAN,

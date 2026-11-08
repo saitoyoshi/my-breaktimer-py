@@ -6,6 +6,7 @@ to ensure break windows NEVER get hidden behind fullscreen applications (games, 
 
 import ctypes
 from ctypes import wintypes
+import time
 from typing import Tuple
 
 user32 = ctypes.windll.user32
@@ -393,6 +394,23 @@ def is_audio_playing() -> bool:
         if co_initialized:
             ole32.CoUninitialize()
 
+    return False
+
+
+def is_audio_active(duration_seconds: float = 0.2, sample_interval: float = 0.04) -> bool:
+    """
+    Checks if audio is currently playing, sampling over duration_seconds
+    to avoid false negatives during brief pauses in speech or music beats.
+    Returns True immediately if audio is detected.
+    If no audio is output within duration_seconds, returns False.
+    """
+    end_time = time.time() + duration_seconds
+    while True:
+        if is_audio_playing():
+            return True
+        if time.time() >= end_time:
+            break
+        time.sleep(sample_interval)
     return False
 
 

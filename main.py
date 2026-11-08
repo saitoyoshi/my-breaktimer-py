@@ -15,7 +15,8 @@ from app.config import ConfigManager
 from app.audio import AudioManager
 from app.timer_service import TimerService, TimerState
 from app.win32 import (
-    acquire_single_instance, release_single_instance, send_media_play_pause
+    acquire_single_instance, release_single_instance, send_media_play_pause,
+    is_audio_active
 )
 from app.ui.main_window import MainWindow
 from app.ui.overlay import BreakOverlay
@@ -85,6 +86,7 @@ class BreakTimerApp:
         # 3. Overlay, Prompt Banner, and Main Window
         self.overlay: Optional[BreakOverlay] = None
         self.prompt_banner: Optional[BreakPromptBanner] = None
+        self._media_paused_by_break: bool = False
         self.main_window = MainWindow(
             root=self.root,
             timer_service=self.timer_service,
@@ -234,13 +236,21 @@ class BreakTimerApp:
                 self.prompt_banner.close()
                 self.prompt_banner = None
 
-            # Auto-pause video/music (Netflix, YouTube, etc.) if enabled
+            # Auto-pause video/music (Netflix, YouTube, etc.) ONLY if audio is actively playing
             if self.config.auto_pause_media:
                 try:
-                    send_media_play_pause()
-                    self.timer_service._log("動画/音楽を自動一時停止 (Netflix/YouTube)")
+                    if is_audio_active():
+                        send_media_play_pause()
+                        self._media_paused_by_break = True
+                        self.timer_service._log("再生中の動画/音楽を自動一時停止しました (Netflix/YouTube)")
+                    else:
+                        self._media_paused_by_break = False
+                        self.timer_service._log("動画/音楽の再生は検出されなかったため、一時停止キーの送信をスキップしました")
                 except Exception as e:
+                    self._media_paused_by_break = False
                     print(f"[Main] Auto pause error: {e}")
+            else:
+                self._media_paused_by_break = False
 
             # Play start sound
             self.audio_manager.play_break_start(
@@ -270,13 +280,14 @@ class BreakTimerApp:
                     enabled=self.config.sound_enabled
                 )
 
-            # Auto-resume media if configured
-            if completed and self.config.auto_resume_media:
+            # Auto-resume media if configured AND media was actually paused by break start
+            if completed and self.config.auto_resume_media and self._media_paused_by_break:
                 try:
                     send_media_play_pause()
                     self.timer_service._log("動画/音楽を自動再開")
                 except Exception as e:
                     print(f"[Main] Auto resume error: {e}")
+            self._media_paused_by_break = False
 
             # Close overlay
             if self.overlay:
